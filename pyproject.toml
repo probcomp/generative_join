@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "generative-join"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10,<3.13"
+genjax = {git = "https://github.com/probcomp/genjax.git"}
+ipdb = "^0.13.13"
+black = "^24.3.0"
+jax = "^0.4.25"
+pytest = "^8.1.1"
+jupyter = "^1.0.0"
+polars = "^0.20.16"
+
+
+[[tool.poetry.source]]
+name = "gcp"
+url = "https://us-west1-python.pkg.dev/probcomp-caliban/probcomp/simple/"
+priority = "explicit"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
