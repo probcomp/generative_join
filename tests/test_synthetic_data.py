@@ -11,7 +11,6 @@ from generative_join.modeling import (
     importance_sample,
     estimate_mu_std,
     make_conditions_dict,
-    make_obs,
     estimate_logprobs,
 )
 

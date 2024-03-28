@@ -14,6 +14,7 @@ jax = "^0.4.25"
 pytest = "^8.1.1"
 jupyter = "^1.0.0"
 polars = "^0.20.16"
+seaborn = "^0.13.2"
 
 
 [[tool.poetry.source]]
