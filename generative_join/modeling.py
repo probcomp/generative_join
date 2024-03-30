@@ -12,10 +12,12 @@ def aggregate_mean(mu, std, count):
     return genjax.normal(mu, sigma) @ "mean"
 
 
-def importance_sample(key, gen_fn, conditions, condition_names, n_samples):
+def importance_sample(key, gen_fn, gen_fn_args, conditions, condition_names, n_samples):
     observations = make_obs(conditions, condition_names)
     keys = jax.random.split(key, n_samples)
-    return jax.vmap(gen_fn.importance, in_axes=(0, None, None))(keys, observations, ())
+    return jax.vmap(gen_fn.importance, in_axes=(0, None, None))(
+        keys, observations, gen_fn_args
+    )
 
 
 def estimate_mu_std(trs, ws, target):
@@ -40,5 +42,14 @@ def make_conditions_dict(conditions, condition_names):
 
 def make_obs(conditions, condition_names):
     return genjax.choice_map(
-        {"z": {name: cond for cond, name in zip(conditions, condition_names)}}
+        {name: cond for cond, name in zip(conditions, condition_names)}
     )
+
+
+@static_gen_fn
+def mixture_model(component_logprobs, component_params, gen_fn):
+    component = genjax.categorical(component_logprobs) @ "component"
+    component_param = {k: v[component] for k, v in component_params.items()}
+    # would like to inline this, but leads to unexpected keyword arg
+    value = gen_fn.inline(*component_param.values())
+    return value
