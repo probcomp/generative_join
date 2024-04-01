@@ -1,18 +1,9 @@
 import jax.numpy as jnp
-import jax
 import genjax
-import numpy as np
 from collections import OrderedDict
-from itertools import product
 from jax.scipy.special import logit
 from genjax import static_gen_fn
-from generative_join.modeling import (
-    aggregate_mean,
-    importance_sample,
-    estimate_mu_std,
-    make_conditions_dict,
-    estimate_logprobs,
-)
+from generative_join.modeling import aggregate
 
 @static_gen_fn
 def gen_parametrized_z(
@@ -76,82 +67,41 @@ component_logprobs = jnp.log(jnp.array([0.3, 0.7]))
 
 
 @static_gen_fn
-def make_health_data(key, gen_z, gen_z_args, n_sample, n_importance_samples):
+def make_health_data(key, gen_z, gen_z_args, n_samples, n_importance_samples):
     # model for OI life expectancy data
     # https://opportunityinsights.org/wp-content/uploads/2018/04/health_ineq_online_table_7_readme.pdf
-    n_importance_samples = n_importance_samples.const
 
-    conditions = product(
-        [0, 1],
-        [0, 1],
-        [0, 1, 2, 3],
+    return aggregate.inline(
+        key,
+        gen_z,
+        gen_z_args,
+        {
+            "high_income": [0, 1],
+            "male": [0, 1],
+            "region": [0, 1, 2, 3],
+        },
+        {
+            "high_life_expectancy": "mean"
+        },
+        n_samples,
     )
-    conditions = np.array([c for c in conditions])
-
-    condition_names = ["high_income", "male", "region"]
-    keys = jax.random.split(key, len(conditions))
-
-    trs, ws = jax.vmap(importance_sample, in_axes=(0, None, None, 0, None, None))(
-        keys, gen_z, gen_z_args, conditions, condition_names, n_importance_samples
-    )
-
-    logprob_conditions = jax.vmap(estimate_logprobs)(ws)
-
-    group_sizes = (
-        genjax.multinomial(jnp.array(n_sample, float), logprob_conditions)
-        @ "group_sizes"
-    )
-    mus, stds = jax.vmap(estimate_mu_std, in_axes=(0, 0, None))(
-        trs, ws, "high_life_expectancy"
-    )
-
-    map_aggregate_mean = genjax.map_combinator(in_axes=(0, 0, 0))(aggregate_mean)
-    means = map_aggregate_mean(mus, stds, group_sizes) @ "map_aggregate_mean"
-
-    # make dictionary with high_income, male, region, mean(high_life_expectancy), and counts
-    conditions_dict = make_conditions_dict(conditions, condition_names)
-    conditions_dict["mean(high_life_expectancy)"] = means
-    conditions_dict["count"] = group_sizes
-
-    return conditions_dict
-
 
 @static_gen_fn
-def make_social_data(key, gen_z, gen_z_args, n_sample, n_importance_samples):
+def make_social_data(key, gen_z, gen_z_args, n_samples, n_importance_samples):
     # model for OI social connectedness data
-    n_importance_samples = n_importance_samples.const
-
-    conditions = product(
-        [0, 1],
-        [0, 1, 2, 3],
+    return aggregate.inline(
+        key,
+        gen_z,
+        gen_z_args,
+        {
+            "attended_elite_college": [0, 1],
+            "region": [0, 1, 2, 3],
+        },
+        {
+            "connected": "mean"
+        },
+        n_samples,
     )
-    conditions = np.array([c for c in conditions])
-
-    condition_names = ["attended_elite_college", "region"]
-    keys = jax.random.split(key, len(conditions))
-
-    trs, ws = jax.vmap(importance_sample, in_axes=(0, None, None, 0, None, None))(
-        keys, gen_z, gen_z_args, conditions, condition_names, n_importance_samples
-    )
-
-    logprob_conditions = jax.vmap(estimate_logprobs)(ws)
-
-    group_sizes = (
-        genjax.multinomial(jnp.array(n_sample, float), logprob_conditions) @ "social_group_sizes"
-    )
-    mus, stds = jax.vmap(estimate_mu_std, in_axes=(0, 0, None))(
-        trs, ws, "connected"
-    )
-
-    map_aggregate_mean = genjax.map_combinator(in_axes=(0, 0, 0))(aggregate_mean)
-    means = map_aggregate_mean(mus, stds, group_sizes) @ "social_map_aggregate_mean"
-
-    # make dictionary with high_income, male, region, mean(high_life_expectancy), and counts
-    conditions_dict = make_conditions_dict(conditions, condition_names)
-    conditions_dict["mean(connected)"] = means
-    conditions_dict["count"] = group_sizes
-
-    return conditions_dict
 
 @static_gen_fn
 def make_politics_data(gen_z, gen_z_args, n_sample):

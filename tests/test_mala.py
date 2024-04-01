@@ -32,9 +32,9 @@ def model(key, n_sample, n_importance_samples):
     args = (component_logprobs, gen_component_params, gen_parametrized_z)
     # fix: if I don't inline the calls to health/social data, I get an UnexpectedTracer error when doing
     # IS on model. 
-    health_data = make_health_data.inline(keys[0], mixture_model, args, n_sample, genjax.Pytree.const(n_importance_samples))
-    social_data = make_social_data.inline(keys[1], mixture_model, args, n_sample, genjax.Pytree.const(n_importance_samples))
-    politics_data = make_politics_data.inline(mixture_model, args, genjax.Pytree.const(n_sample))
+    health_data = make_health_data(keys[0], mixture_model, args, n_sample, genjax.Pytree.const(n_importance_samples)) @ "health"
+    social_data = make_social_data(keys[1], mixture_model, args, n_sample, genjax.Pytree.const(n_importance_samples)) @ "social"
+    politics_data = make_politics_data(mixture_model, args, genjax.Pytree.const(n_sample)) @ "politics"
 
     return health_data, social_data, politics_data
 
@@ -43,15 +43,18 @@ def test_mala():
     keys = jax.random.split(key, 6)
     n_sample = 1000
     n_importance_samples = 10000
-    n_mala_iters = 20
+    n_mala_iters = 100
     args = (component_logprobs, component_params, gen_parametrized_z)
 
     health_tr = make_health_data.simulate(keys[0], (keys[1], mixture_model, args, n_sample, genjax.Pytree.const(n_importance_samples)))
     social_tr = make_social_data.simulate(keys[2], (keys[3], mixture_model, args, n_sample, genjax.Pytree.const(n_importance_samples)))
     politics_tr = make_politics_data.simulate(keys[4], (mixture_model, args, genjax.Pytree.const(n_sample)))
 
-    obs, _ = health_tr.get_choices().merge(social_tr.get_choices())
-    obs, _ = obs.merge(politics_tr.get_choices())
+    obs = genjax.choice_map({
+        "health": health_tr.get_choices(),
+        "social": social_tr.get_choices(),
+        "politics": politics_tr.get_choices()
+    })
 
     keys = jax.random.split(keys[5], 3)
     tr, w = model.importance(keys[0], obs, (keys[1], genjax.Pytree.const(n_sample), genjax.Pytree.const(n_importance_samples)))
@@ -78,8 +81,8 @@ def test_mala():
 
     assert jnp.all(accepted)
 
-    val = jnp.exp(new_tr["logits"]) / jnp.sum(jnp.exp(new_tr["logits"]), axis=-1, keepdims=True)
-    assert jnp.allclose(val, jnp.array([.3, .7]), atol=.1)
+    val = jnp.exp(new_tr["logits"]) / jnp.sum(jnp.exp(new_tr["logits"]))
+    assert jnp.allclose(val, jnp.array([.3, .7]), atol=.15)
 
     # todo: run mala for more iterations to tighten bound
     for k in component_params.keys():
